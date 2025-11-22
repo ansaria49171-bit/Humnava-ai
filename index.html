@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HUMNAVA AI — Your Emotional AI Companion</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ---------- AVATAR + GLOW ---------- */
+    .avatar-box {
+      width: 150px;
+      height: 150px;
+      margin: 0 auto 12px auto;
+      border-radius: 50%;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 22px #b36bff;
+      transition: 0.3s ease;
+    }
+
+    .avatar-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Idle Glow */
+    .avatar-idle {
+      animation: idleGlow 3s infinite alternate ease-in-out;
+    }
+
+    /* Thinking Mode */
+    .avatar-thinking {
+      box-shadow: 0 0 32px #ffca6b !important;
+      animation: thinkingPulse 1s infinite;
+    }
+
+    /* Speaking Mode */
+    .avatar-speaking {
+      box-shadow: 0 0 38px #6bffb1 !important;
+      animation: speakingPulse 0.65s infinite;
+    }
+
+    @keyframes idleGlow {
+      0% { box-shadow: 0 0 16px #b36bff; }
+      100% { box-shadow: 0 0 28px #d28aff; }
+    }
+
+    @keyframes thinkingPulse {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.03); }
+    }
+
+    @keyframes speakingPulse {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.06); }
+    }
+
+    /* MIC BUTTON FIX */
+    .mic-btn {
+      background: #ff6fb1;
+      border: none;
+      font-size: 1.4rem;
+      padding: 10px 14px;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- 🔥 AVATAR HERE -->
+    <div id="avatar" class="avatar-box avatar-idle">
+      <img src="logo.jpg" alt="Humnava Avatar" />
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <img src="logo.jpg" alt="Humnava Logo" class="logo" />
+        <div class="brand-text">
+          <h1>HUMNAVA AI</h1>
+          <p class="tag">AI that listens from the heart</p>
+        </div>
+      </div>
+      <div class="status" id="status">Live</div>
+    </header>
+
+    <main class="chat-area">
+      <div id="chatBox" class="chat-box" aria-live="polite"></div>
+
+      <!-- MIC ADDED -->
+      <form id="chatForm" class="chat-form" autocomplete="off">
+        <button type="button" id="micBtn" class="mic-btn">🎤</button>
+        <input id="input" type="text" placeholder="Speak or type a message..." />
+        <button type="submit" id="sendBtn">Send</button>
+      </form>
+    </main>
+
+    <footer class="foot">
+      <small>© 2025 HUMNAVA AI • Built with ♥ by Ansari Abdulla</small>
+    </footer>
+  </div>
+
+  <script>
+    // ---------- CONFIG ----------
+    const PROXY_URL = "https://humnava-backend-19jj-git-main-abdulla-ansari-s-projects.vercel.app";
+    const CHAT_ENDPOINT = PROXY_URL + "/chat";
+
+    // ---------- DOM ----------
+    const chatBox = document.getElementById("chatBox");
+    const form = document.getElementById("chatForm");
+    const input = document.getElementById("input");
+    const sendBtn = document.getElementById("sendBtn");
+    const status = document.getElementById("status");
+    const micron = document.getElementById("micBtn");
+    const avatar = document.getElementById("avatar");
+
+    function avatarIdle() {
+      avatar.className = "avatar-box avatar-idle";
+    }
+
+    function avatarThinking() {
+      avatar.className = "avatar-box avatar-thinking";
+    }
+
+    function avatarSpeaking() {
+      avatar.className = "avatar-box avatar-speaking";
+    }
+
+    function addBubble(kind, html) {
+      const wrap = document.createElement("div");
+      wrap.className = "bubble " + kind;
+      wrap.innerHTML = html;
+      chatBox.appendChild(wrap);
+      chatBox.scrollTop = chatBox.scrollHeight;
+      return wrap;
+    }
+
+    function setStatus(text, color) {
+      status.textContent = text;
+      if (color) status.style.background = color;
+    }
+
+    function typingBubble() {
+      return addBubble("bot typing",
+        `<span class="dots"><span></span><span></span><span></span></span> Humnava is typing...`
+      );
+    }
+
+    // ---------- SPEAK ----------
+    function speakText(text) {
+      try {
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = "hi-IN";
+        utter.pitch = 1;
+        utter.rate = 1;
+        utter.volume = 1;
+
+        avatarSpeaking();
+        utter.onend = () => avatarIdle();
+
+        speechSynthesis.cancel();
+        speechSynthesis.speak(utter);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // ---------- SEND MESSAGE ----------
+    async function sendMessage(message) {
+      if (!message) return;
+
+      addBubble("user", `<div class="txt">${escapeHtml(message)}</div>`);
+      input.value = "";
+
+      input.disabled = true;
+      sendBtn.disabled = true;
+
+      const typingEl = typingBubble();
+      avatarThinking();
+      setStatus("Thinking...", "#9b6bd6");
+
+      try {
+        const res = await fetch(CHAT_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message })
+        });
+
+        if (typingEl && typingEl.parentNode) typingEl.remove();
+
+        if (!res.ok) {
+          addBubble("bot error", `<div class="txt">Server error. Try again.</div>`);
+          setStatus("Error", "#c7516b");
+          avatarIdle();
+        } else {
+          const data = await res.json();
+          const reply = data.reply || "I'm here.";
+
+          addBubble("bot", `<div class="txt">${escapeHtml(reply)}</div>`);
+
+          setStatus("Live", "#4ad28a");
+
+          avatarSpeaking();
+          speakText(reply);
+        }
+      } catch (err) {
+        if (typingEl && typingEl.parentNode) typingEl.remove();
+        addBubble("bot error", `<div class="txt">Network error.</div>`);
+        avatarIdle();
+        setStatus("Offline", "#e07b7b");
+      } finally {
+        input.disabled = false;
+        sendBtn.disabled = false;
+      }
+    }
+
+    // ---------- MIC (VOICE INPUT) ----------
+    let recognizing = false;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "hi-IN";
+      recognition.interimResults = false;
+      recognition.continuous = false;
+
+      micron.addEventListener("click", () => {
+        if (!recognizing) {
+          recognition.start();
+          micron.textContent = "🎙️";
+          recognizing = true;
+        } else {
+          recognition.stop();
+          micron.textContent = "🎤";
+          recognizing = false;
+        }
+      });
+
+      recognition.onresult = (e) => {
+        const voiceText = e.results[0][0].transcript;
+        input.value = voiceText;
+        sendMessage(voiceText);
+      };
+
+      recognition.onerror = () => {
+        micron.textContent = "🎤";
+        recognizing = false;
+      };
+
+      recognition.onend = () => {
+        micron.textContent = "🎤";
+        recognizing = false;
+      };
+    } else {
+      micron.style.display = "none";
+    }
+
+    function escapeHtml(s) {
+      return (s + "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      sendMessage(text);
+    });
+
+    window.addEventListener("load", () => {
+      addBubble("bot",
+        `<div class="txt">👋 Hi, I'm Humnava — your emotional AI companion. Ask me anything.</div>`
+      );
+    });
+  </script>
+</body>
+</html>
